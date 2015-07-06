@@ -51,7 +51,7 @@ public class MatrixWorker {
 	private void paraInit(){
 		readerFileName = "D:\\Dropbox\\Developer\\MATLAB\\MATLAB-repos\\matlab-guoguo\\data\\NEB406mov0606-video2.txt";
 		rowSize = 3454;
-		listName = "NEB406mov0606-video2";
+		listName = "NEB406mov0606-video2new3";
 	}
 	
 	private void redisInit() {
@@ -100,7 +100,7 @@ public class MatrixWorker {
 				if(counter<size){
 					toUpload += currenline;
 					counter++;
-					System.out.println(counter);
+					System.out.println(currenline);
 				}else{
 					System.out.println("one package ready to go");
 					counter = 0;
@@ -108,7 +108,7 @@ public class MatrixWorker {
 					toUpload = "";
 					toUpload += currenline;
 					counter++;
-					System.out.println(counter);
+					System.out.println(currenline);
 				}
 			}
 		} catch (IOException e) {

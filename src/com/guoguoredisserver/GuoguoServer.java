@@ -4,7 +4,6 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -14,83 +13,81 @@ import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 import redis.clients.jedis.JedisPubSub;
 
-import com.mathworks.toolbox.javabuilder.MWException;
-import com.mathworks.toolbox.javabuilder.MWNumericArray;
+import com.guoguoredisserver.Adpcm.AdpcmState;
+import com.sun.org.apache.xerces.internal.impl.dv.util.Base64;
 
 public class GuoguoServer {
-	
+
 	JedisPoolConfig conf;
 	JedisPool pool;
 	String redisIP;
-	
-	public static void main(String[] args){
+
+	public static void main(String[] args) {
 		GuoguoServer server = new GuoguoServer();
 		server.DataRecordStart();
 	}
 
-	void ServerStart(){
+	void ServerStart() {
 		redisInit();
 		AdminThread admin = new AdminThread();
 		admin.start();
-		
+
 		TestThread test = new TestThread();
 		test.start();
 	}
-	
-	void DataRecordStart(){
+
+	void DataRecordStart() {
 		redisInit();
-		HandlerThread dataRecord = new HandlerThread("dataRecord");
+		HandlerThread dataRecord = new HandlerThread("vv");
 		dataRecord.start();
-		
-//		TestThread test = new TestThread();
-//		test.start();
+
+		// TestThread test = new TestThread();
+		// test.start();
 	}
-	
-	class TestThread extends Thread{
-		public void run(){
-			
-				
+
+	class TestThread extends Thread {
+		public void run() {
+
+			try {
+				Thread.sleep(3000);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+
+			Jedis testJedis = pool.getResource();
+			// testJedis.publish("GuoguoServer Admin Channel",
+			// "testuser:start");
+			// System.out.println("test message sent");
+
+			try {
+				Thread.sleep(3000);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+
+			int i = 0;
+			while (i < 50) {
 				try {
-					Thread.sleep(3000);
+					Thread.sleep(500);
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
-				
-				
-				Jedis testJedis= pool.getResource();
-//				testJedis.publish("GuoguoServer Admin Channel", "testuser:start");
-//				System.out.println("test message sent");
-			
-				try {
-					Thread.sleep(3000);
-				} catch (InterruptedException e) {
-					e.printStackTrace();
+				String toSend = "";
+				for (int k = 0; k < 4; k++) {
+					Random rand = new Random();
+					toSend += String.valueOf(rand.nextFloat() + " ");
 				}
-				
-				int i = 0;
-				while(i <50){
-					try {
-						Thread.sleep(500);
-					} catch (InterruptedException e) {
-						e.printStackTrace();
-					}
-					String toSend = "";
-					for(int k =0;k<4;k++){
-						Random rand = new Random();
-						toSend += String.valueOf(rand.nextFloat()+" ");
-					}
-					String toSendStr = toSend.toString();
-					testJedis.publish("dataRecord_channel_up", toSendStr);
-					System.out.println("data sent, which is "+toSendStr);
-					i++;
-				}
-			
+				String toSendStr = toSend.toString();
+				testJedis.publish("dataRecord_channel_up", toSendStr);
+				System.out.println("data sent, which is " + toSendStr);
+				i++;
+			}
+
 		}
 	}
 
-	
 	void redisInit() {
-		redisIP = "10.227.80.244";
+		redisIP = "localhost";
 
 		conf = new JedisPoolConfig();
 		conf.setMaxActive(10000);
@@ -103,48 +100,47 @@ public class GuoguoServer {
 
 	}
 
-	class AdminThread extends Thread{
+	class AdminThread extends Thread {
 
 		private Jedis listenerJedis;
 		private String adminChannel;
 		private NotificationLisetner nl;
-		
-		private void init(){
-			while(listenerJedis == null){
+
+		private void init() {
+			while (listenerJedis == null) {
 				listenerJedis = pool.getResource();
 			}
 			nl = new NotificationLisetner();
 			adminChannel = "GuoguoServer Admin Channel";
-			
+
 			System.out.println("adminThread init ready");
-			
+
 		}
-		
+
 		public void run() {
 			init();
-			
+
 			listenerJedis.subscribe(nl, adminChannel);
 		}
-		
+
 		private class NotificationLisetner extends JedisPubSub {
 			@Override
 			public void onMessage(String channel, String msg) {
 				System.out.println("notificationlistener msg received:" + msg);
-				
+
 				String userName = (msg.split(":"))[0];
 				String command = (msg.split(":"))[1];
-				
-				if (command.equals("stop")){
-					System.out.println("HT stoped: "+userName);
-				} else if (command.equals("start")){
+
+				if (command.equals("stop")) {
+					System.out.println("HT stoped: " + userName);
+				} else if (command.equals("start")) {
 					HandlerThread ht = new HandlerThread(userName);
 					ht.start();
-					System.out.println("HT started: "+userName);
+					System.out.println("HT started: " + userName);
 				} else {
 					System.out.println("msg error!!!!!!!!!!!!!");
 				}
-				
-				
+
 			}
 
 			@Override
@@ -167,153 +163,206 @@ public class GuoguoServer {
 			public void onUnsubscribe(String arg0, int arg1) {
 			}
 		}
-		
+
 	}
-	
-	class HandlerThread extends Thread{
-		
+
+	class HandlerThread extends Thread {
+
 		private String userName;
 		private String channel_up;
 		private String channel_down;
-		private LinkedBlockingDeque<String> receivedDataBuffer;		
+		private LinkedBlockingDeque<String> receivedDataBuffer;
 		private MatrixBuffer resultBuffer;
 		private HandlerLisetner hl;
 		private Jedis listenerJedis;
-		private int receivedSize = 100; 
+		private int receivedSize = 100;
 		private int columnSize = 4;
 		private int rowSize = 100;
-		
+
 		private MatrixBuffer tempBuffer;
 		private int startColumn = 4;
 		private int endColumn = 9;
 		private int tempBuffer_rows = 100;
-		private int tempBuffer_columns = endColumn-startColumn+1;
-		
-		//******************** Guoguo algorithm related parameters
-		private Jedis pushredis; //redis which to push location results to the redis storage
-		public String redisaddress="10.227.80.244";//The address of the redis server
-		public String redispubid="User0";//The user id of the redis pub channel
-		public String redislocationlist="redisresult";//new add, the redis list name that stored all the estimated location data.
-		
-		private int StationNum=6;//Total number of anchor stations.
-		//private double stations[][]={{105, 11.5, 110.5, 172.5, 257, 317, 338, 254, 194},{0, 49, 85, 85, 87, 87, 2, 2, 2}};
-/*		private double stations[][]={{795.284160000000,	880.445280000000,	846.521040000000,	284.835600000000,	267.614400000000,	369.234720000000},
-			{15.6057600000000,	235.122720000000,	363.169200000000,	366.918240000000,	113.477040000000,	6.61416000000000}};*/
-		
+		private int tempBuffer_columns = endColumn - startColumn + 1;
+
+		// ******************** Guoguo algorithm related parameters
+		private Jedis pushredis; // redis which to push location results to the
+									// redis storage
+		public String redisaddress = "10.227.80.244";// The address of the redis
+														// server
+		public String redispubid = "User0";// The user id of the redis pub
+											// channel
+		public String redislocationlist = "redisresult";// new add, the redis
+														// list name that stored
+														// all the estimated
+														// location data.
+
+		private int StationNum = 6;// Total number of anchor stations.
+		// private double stations[][]={{105, 11.5, 110.5, 172.5, 257, 317, 338,
+		// 254, 194},{0, 49, 85, 85, 87, 87, 2, 2, 2}};
+		/*
+		 * private double stations[][]={{795.284160000000, 880.445280000000,
+		 * 846.521040000000, 284.835600000000, 267.614400000000,
+		 * 369.234720000000}, {15.6057600000000, 235.122720000000,
+		 * 363.169200000000, 366.918240000000, 113.477040000000,
+		 * 6.61416000000000}};
+		 */
+
 		private double stations[][] = {
-				{ 256.8854, 30.3886, 291.6631, 661.5074, 798.2102, 632.8867},//x-coordinate in cm
-				{ 0, 123.372, 210.0783, 205.7603, 203.2203, 3.81} };//y-coordinate in cm
-		
-		private String storefilename="RedisRanging0607-3";
-		//private String redisaddress="10.227.80.244";//The address of the redis server
-		//private String redispubid="User0";//The user id of the redis pub channel
-		private int resultlen=StationNum*4+2;
-		private int numpos=0;
-		private int [] stationid;
-		
-		private double[][] rangingV;//Store the current ranging value transmitted from App
-		private double[][] rangingVNew;//Store the current ranging value calculated from TBL
+				{ 256.8854, 30.3886, 291.6631, 661.5074, 798.2102, 632.8867 },// x-coordinate
+																				// in
+																				// cm
+				{ 0, 123.372, 210.0783, 205.7603, 203.2203, 3.81 } };// y-coordinate
+																		// in cm
+
+		// 3D coordinate
+		private double stations3D[][] = {
+				{ 256.8854, 30.3886, 291.6631, 661.5074, 798.2102, 632.8867 },// x-coordinate
+																				// in
+																				// cm
+				{ 0, 123.372, 210.0783, 205.7603, 203.2203, 3.81 },
+				{ 0, 0, 0, 0, 0, 0 } };// y-coordinate in cm
+
+		private String storefilename = "audio";
+		// private String redisaddress="10.227.80.244";//The address of the
+		// redis server
+		// private String redispubid="User0";//The user id of the redis pub
+		// channel
+		private int resultlen = StationNum * 4 + 2;
+		private int numpos = 0;
+		private int[] stationid;
+
+		private double[][] rangingV;// Store the current ranging value
+									// transmitted from App
+		private double[][] rangingVNew;// Store the current ranging value
+										// calculated from TBL
 		private int rangingV_rows = 3;
 		private int rangingV_cols = StationNum;
-		
-		private MatrixBuffer rangingIniV;//Store all ranging values transmitted from App
+
+		private MatrixBuffer rangingIniV;// Store all ranging values transmitted
+											// from App
 		private double[][] rangingIniVdut;
-		private int rangingIniV_rows = 150;//maximum value
+		private int rangingIniV_rows = 150;// maximum value
 		private int rangingIniV_cols = StationNum;
-		
-		private MatrixBuffer rangingVFit;//Store all the fitted ranging values from rangingIniV
+
+		private MatrixBuffer rangingVFit;// Store all the fitted ranging values
+											// from rangingIniV
 		private double[][] rangingVFitdut;
-		private int rangingVFit_rows = 150;//maximum value
+		private int rangingVFit_rows = 150;// maximum value
 		private int rangingVFit_cols = StationNum;
-		
+
 		private int ranging_backrows = 100;
 		private int pos_backrows = 100;
-		
-		private int[] outliertimeoutvec =new int[StationNum];//time out counter for the ranging results
-		private float[] LocP = new float[3];//[ref,Methodflag, estdelta]
-		
-		private int poslen=4;
+
+		// private int[] outliertimeoutvec =new int[StationNum];//time out
+		// counter for the ranging results
+		private int[] outliertimeoutvec = new int[StationNum];// time out
+																// counter
+		// for the ranging
+		// results
+		private double[] kalmanx = new double[StationNum];// zeros(2,Numstation);
+		private double[] kalmanP = new double[StationNum];;// kalmanP=10.*ones(2,Numstation);
+		private int[] kalmanzeroN = new int[StationNum];// =zeros(1,Numstation);
+		private float[] LocP = new float[3];// [ref,Methodflag, estdelta]
+
+		private int poslen = 4;
 		double[] positionval = new double[poslen];
 		double[] positionnew = new double[poslen];
-		
+
 		private MatrixBuffer PosVFit;
 		private double[][] PosVFitdut;
 		private MatrixBuffer PosTotal;
 		private double[][] PosTotaldut;
-		private int maxrows = 30;//maximum value
-		//private int[] posoutliertimeout=new int[StationNum];//time out counter for the location results
-		private int posoutliertimeout=0;
-		
-		String outputline=null;
-		
-		GuoguoJavaWin.Java2MATLAB j2mInst; //matlab algorithm instance
-		Object [] returnresult0 = null;// Define the object return by MATLAB
-		Object [] returnresult1 = null;// Define the object return by MATLAB
-		Object [] returnresult2 = null;//Define the object return by MATLAB
-		
+		private int maxrows = 30;// maximum value
+		// private int[] posoutliertimeout=new int[StationNum];//time out
+		// counter for the location results
+		private int[] posoutliertimeout = new int[2];// 0;
+		// poskalmanx=zeros(1,2);
+		// poskalmanP=10.*ones(1,2);
+		private double[] poskalmanx = new double[2];
+		private double[] poskalmanP = new double[2];
+
+		String outputline = null;
+
+		// GuoguoJavaWin.Java2MATLAB j2mInst; //matlab algorithm instance
+		Object[] returnresult0 = null;// Define the object return by MATLAB
+		Object[] returnresult1 = null;// Define the object return by MATLAB
+		Object[] returnresult2 = null;// Define the object return by MATLAB
+
 		BufferedWriter writerpos; // to save data in harddisk
-		
+
 		Worker myWorker;
-		
+
 		public void run() {
-			init();	
+			init();
 			myWorker.start();
 			listenerJedis.subscribe(hl, channel_up);
 		}
-		
-		private void init(){
-			//Guoguo related init
-			pushredis = new Jedis(redisaddress); 
-			
+
+		private void init() {
+			// Guoguo related init
+			pushredis = new Jedis(redisaddress);
+
 			stationid = new int[StationNum];
 
 			rangingV = new double[rangingV_rows][rangingV_cols];
-			rangingIniV = new MatrixBuffer(rangingIniV_rows,rangingIniV_cols);
-			rangingVFit = new MatrixBuffer(rangingVFit_rows,rangingVFit_cols);
-			
-			PosVFit = new MatrixBuffer(maxrows,poslen);
-			PosTotal = new MatrixBuffer(maxrows,poslen);
-			
-			LocP[0]=0;//ref
-			LocP[1]=1;//Methodflag
-			LocP[2]=0;//estdelta
+			rangingIniV = new MatrixBuffer(rangingIniV_rows, rangingIniV_cols);
+			rangingVFit = new MatrixBuffer(rangingVFit_rows, rangingVFit_cols);
+
+			PosVFit = new MatrixBuffer(maxrows, poslen);
+			PosTotal = new MatrixBuffer(maxrows, poslen);
+
+			for (int i = 0; i < StationNum; i++) {
+				kalmanx[i] = 0;
+				// kalmanx[1][i]=0;
+				kalmanP[i] = 10;
+				// kalmanP[1][i]=10;
+				kalmanzeroN[i] = 0;
+			}
+			poskalmanx[0] = 0;
+			poskalmanx[1] = 0;
+			poskalmanP[0] = 10;
+			poskalmanP[1] = 10;
+
+			LocP[0] = 0;// ref
+			LocP[1] = 1;// Methodflag
+			LocP[2] = 0;// estdelta
 			try {
-				writerpos = new BufferedWriter(new FileWriter(storefilename+"pos.txt"));
+				writerpos = new BufferedWriter(new FileWriter(storefilename
+						+ "pos.txt"));
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-			//instanciate algorithm instance
-			try {
-				j2mInst=new GuoguoJavaWin.Java2MATLAB(); //initialize the Java2MATLAB instance
-			} catch (MWException e) {
-				e.printStackTrace();
-			}
-			//end here
-			
-			
+			// instanciate algorithm instance
+			// try {
+			// j2mInst=new GuoguoJavaWin.Java2MATLAB(); //initialize the
+			// Java2MATLAB instance
+			// } catch (MWException e) {
+			// e.printStackTrace();
+			// }
+			// end here
+
 			receivedDataBuffer = new LinkedBlockingDeque<String>(receivedSize);
-			resultBuffer = new MatrixBuffer(rowSize,columnSize);
-			tempBuffer = new MatrixBuffer(tempBuffer_rows,tempBuffer_columns);
-			while(listenerJedis == null){
+			resultBuffer = new MatrixBuffer(rowSize, columnSize);
+			tempBuffer = new MatrixBuffer(tempBuffer_rows, tempBuffer_columns);
+			while (listenerJedis == null) {
 				listenerJedis = pool.getResource();
 			}
-			 hl = new HandlerLisetner();
-			 myWorker = new Worker();
+			hl = new HandlerLisetner();
+			myWorker = new Worker();
 			System.out.println("handler init ready");
 		}
-			
-		
 
 		public HandlerThread(String _userName) {
 			this.userName = _userName;
-			this.channel_up = _userName+"_channel_up";
-			this.channel_down = _userName+"_channel_down";
+			this.channel_up = _userName + "_list";
+			this.channel_down = _userName + "_channel_down";
 		}
-		
+
 		private class HandlerLisetner extends JedisPubSub {
 			@Override
 			public void onMessage(String channel, String msg) {
-				System.out.println("handlerlistener msg received:" + msg);
+				// System.out.println("handlerlistener msg received:" + msg);
 				receivedDataBuffer.add(msg);
 			}
 
@@ -337,313 +386,277 @@ public class GuoguoServer {
 			public void onUnsubscribe(String arg0, int arg1) {
 			}
 		}
-		
-		private class Worker extends Thread{
+
+		private class Worker extends Thread {
 			BufferedWriter writer;
-			public void run(){
+
+			public void run() {
 				try {
-					writer = new BufferedWriter(new FileWriter(storefilename+".txt"));
+					writer = new BufferedWriter(new FileWriter(storefilename
+							+ ".txt"));
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
-				
-				while(true){
-					if(receivedDataBuffer.isEmpty() == false){
+
+				while (true) {
+					if (receivedDataBuffer.isEmpty() == false) {
 						String toprocess = receivedDataBuffer.poll();
-//						myprocess(toprocess);
 						datarecord(toprocess);
-						process_2(toprocess);
+						// process_2(toprocess);
 					}
 				}
-				
+
 			}
-			
-			float[] fromStringToFloat(String in){
-				String[] strs = in.split(" ");
-				float[] result = new float[strs.length];
-				
-					for(int i = 0; i<strs.length;i++){
-						result[i] = Float.valueOf(strs[i]);
-					}
-				
-				return result;
+
+			String fromStringToFloat(String in) {
+				byte[] bytes = Base64.decode(in);
+				// float[] floatValues = new float[bytes.length / 4];
+				StringBuffer floatString = new StringBuffer();
+
+				for (int i = 0; i < bytes.length; i += 4) {
+					int asInt = (bytes[i] & 0xFF)
+							| ((bytes[i + 1] & 0xFF) << 8)
+							| ((bytes[i + 2] & 0xFF) << 16)
+							| ((bytes[i + 3] & 0xFF) << 24);
+					floatString.append(Float.intBitsToFloat(asInt)).append(" ");
+				}
+
+				return floatString.toString();
 			}
-			
-			private void process_2(String in){
-				//access data
-				float[] data = fromStringToFloat(in);
-				double[] rangingVone=new double[StationNum];
-				numpos=(int) data[0];
-				System.out.println("Current count:"+numpos);
-				LocP[0]=data[1]; //[ref]
-				for(int l=0; l<StationNum;l++)
-				{
-					
-					stationid[l]=(int)data[2+l];
-					//System.out.println("data:"+(int)data[2+l]+" "+data[2+l]);
+
+			private String printvectorstr(double[] input, int num) {
+				String res = "";
+				for (int i = 0; i < num; i++) {
+					res += input[i] + " ";
 				}
-				for(int l=0; l<rangingV_rows;l++)
-				{
-					for(int j=0; j<StationNum;j++)//3
-					{
-						rangingV[l][j]=data[2+StationNum+l*StationNum+j];
-						if (l==0){//only store the first row
-							rangingVone[j]=data[2+StationNum+l*StationNum+j];
-						}
-					}
-				}
-				rangingIniV.addRow(rangingVone);
-				System.out.println("rangingIniV rows:"+rangingIniV.getcurrentRows());
-				
-				try {
-					//Perform the ProcessTBL process, return an object
-					int rowdut = rangingIniV.getcurrentRows()>ranging_backrows?ranging_backrows:rangingIniV.getcurrentRows();
-					if (rowdut<=2)
-					{
-						rangingVFit.addRow(rangingVone);
-						rangingVNew=rangingV;
-					}
-					else
-					{
-						rangingIniVdut=rangingIniV.getLatestArray(rowdut);
-						rangingVFitdut=rangingVFit.getLatestArray(rowdut-1);
-						returnresult0 = j2mInst.ProcessTBLWrap(2, rangingV,rangingVFitdut,rangingIniVdut,outliertimeoutvec);
-						double[] result01=((MWNumericArray)returnresult0[0]).getDoubleData();//[rangingVNew outliertimeoutvec]
-						rangingVNew=resultcast(result01,rangingV_rows,rangingV_cols);
-						outliertimeoutvec=((MWNumericArray)returnresult0[1]).getIntData();//[rangingVNew outliertimeoutvec]
-						rangingVFit.addRow(getfirstrow(rangingVNew,rangingV_rows,rangingV_cols));
-					}
-					
-					//Perform localization process
-					//positionval=ProcessLocCalWrap(rangingVNew,stationid,stations,LocP)
-					returnresult1 = j2mInst.ProcessLocCalWrap(1, rangingVNew,stationid,stations,LocP);
-					//returnresult1 = j2mInst.ProcessLocCalWrap(1, rangingV,stationid,stations,LocP);
-					positionval=((MWNumericArray)returnresult1[0]).getDoubleData();
-					PosTotal.addRow(positionval);
-					int posrowdut = PosTotal.getcurrentRows()>pos_backrows?pos_backrows:PosTotal.getcurrentRows();
-					if (posrowdut<=2)
-					{
-						PosVFit.addRow(positionval);
-						positionnew=positionval;
-					}
-					else
-					{
-						PosTotaldut=PosTotal.getLatestArray(posrowdut);
-						PosVFitdut=PosVFit.getLatestArray(posrowdut-1);
-						returnresult2 = j2mInst.PosPostProcessWrap(3, positionval,PosVFitdut,PosTotaldut,posoutliertimeout,stations);
-						//[positionnew,posoutliertimeout,estdelta]=PosPostProcessWrap(positionval,PosVFit,PosTotal,posoutliertimeout,stations)
-						positionnew=((MWNumericArray)returnresult2[0]).getDoubleData();//[positionnew,posoutliertimeout,estdelta]
-						posoutliertimeout=((MWNumericArray)returnresult2[1]).getInt();
-						LocP[2]=((MWNumericArray)returnresult2[1]).getFloat();
-						PosVFit.addRow(positionnew);
-						
-					}
-					
-				} catch (MWException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				}
-				
-				outputline = printvectorstr(positionnew, 4);
-				pushredis.rpush(redislocationlist,outputline);
-				//outputline = printvectorstr(positionval, 4);
-				//System.out.println(outputline);
-				try {
-					writerpos.write(outputline+"\n");
-					System.out.println("Location:"+outputline);
-					writerpos.flush();
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-				
-				
-				
-				
-//				double[] verifyR = rangingIniV.getFirstRow();
-//				System.out.println("verify row:");
-//				for(int j =0;j<verifyR.length;j++){
-//					System.out.println(verifyR[j]);
-//				}
-			}
-			
-			private String printvectorstr(double[] input,int num){
-				String res="";
-				for (int i=0;i<num;i++)
-				{
-					res+=input[i]+" ";
-				}
-				//System.out.println(res);
+				// System.out.println(res);
 				return res;
 			}
-			
-			private double[][] resultcast(double[] res, int row, int col){
-				double[][] result=new double[row][col];
-				for (int i=0;i<row;i++)
-				{
-					for (int j=0;j<col;j++)
-					{
-						result[i][j]=res[i+j*row];
+
+			private double[][] resultcast(double[] res, int row, int col) {
+				double[][] result = new double[row][col];
+				for (int i = 0; i < row; i++) {
+					for (int j = 0; j < col; j++) {
+						result[i][j] = res[i + j * row];
 					}
 				}
 				return result;
 			}
-			
-			private double[] getfirstrow(double[][] res, int row, int col){
-				double[] result=new double[col];
-				for (int j=0;j<col;j++)
-				{
-					result[j]=res[0][j]*res[1][j];
+
+			private double[] getfirstrow(double[][] res, int row, int col) {
+				double[] result = new double[col];
+				for (int j = 0; j < col; j++) {
+					result[j] = res[0][j] * res[1][j];
 				}
 				return result;
 			}
-			
-			private void datarecord(String in){
+
+			private MediaBlock findNext(byte[] payload, int i) {
+				MediaBlock block = new MediaBlock();
+				System.out.println(payload[0] + " " + payload[1]);
+
+				if (payload[i] == 0x19 && payload[i + 1] == 0x79) {
+
+					block.type = 1;
+					block.timeStamp = (payload[i + 3] << 8) + payload[i + 2];
+					block.length = (payload[i + 7] << 24)
+							+ (payload[i + 6] << 16) + (payload[i + 5] << 8)
+							+ payload[i + 4];
+				} else if (payload[i] == 0x19 && payload[i + 1] == 0x82) {
+
+					block.type = 2;
+					block.timeStamp = (payload[i + 3] << 8) + payload[i + 2];
+					block.length = (payload[i + 7] << 24)
+							+ (payload[i + 6] << 16) + (payload[i + 5] << 8)
+							+ payload[i + 4];
+				}
+
+				return block;
+			}
+
+			Adpcm adpcm = new Adpcm();
+
+			private void datarecord(String in) {
 				try {
-					writer.write(in+"\n");
-					writer.flush();
+					byte[] payload = Base64.decode(in);
+					short[] decode = new short[payload.length * 2];
+					AdpcmState state = adpcm.new AdpcmState();
+					adpcm.initState(state);
+					int s = adpcm.decode(state, payload, 0, payload.length,
+							decode, 0);
+					float[] fa = new float[s];
+					System.out.println("Size---- " + s + " " + decode[0] + " "
+							+ decode[1] + " " + decode[2] + " " + decode[3]);
+					StringBuffer fs = new StringBuffer();
+					for (int i = 0; i < s; i++) {
+						fa[i] = (float) (decode[i] * 1.0 / 32768.0);
+						fs.append(fa[i]).append(" ");
+					}
+					// int i = 0;
+					// while (true) {
+					// if (payload.length - i <= 8) {
+					// break;
+					// }
+					//
+					// MediaBlock block = findNext(payload, i);
+					// if (block.type == 1) {
+					// block.payload = new byte[block.length];
+					// System.arraycopy(payload, 8, block.payload, 0,
+					// block.length);
+					// i = i + 8 + block.length;
+					// } else if (block.type == 2) {
+					// block.payload = new byte[block.length];
+					// System.arraycopy(payload, 8, block.payload, 0,
+					// block.length);
+					// i = i + 8 + block.length;
+					// StringBuffer floatString = new StringBuffer();
+					//
+					// for (int j = 0; j < block.payload.length; j += 4) {
+					// int asInt = (block.payload[i] & 0xFF)
+					// | ((block.payload[i + 1] & 0xFF) << 8)
+					// | ((block.payload[i + 2] & 0xFF) << 16)
+					// | ((block.payload[i + 3] & 0xFF) << 24);
+					// floatString.append(Float.intBitsToFloat(asInt))
+					// .append(" ");
+					// }
+					//
+					//
+					// System.out.println("data written");
+					// } else {
+					// break;
+					// }
+					// }
 					System.out.println("data written");
+					writer.write(fs.toString());
+					writer.flush();
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
-				
+
 			}
-			
-/*			private void myprocess(String in){
-				float[] data = fromStringToFloat(in);
-				float[] result = GuoguoAlgorithm(data);
-				resultBuffer.addRow(result);
-				System.out.println("resultBuffer added");
-				
-				float[] verifyR = resultBuffer.getFirstRow();
-				System.out.println("verify row:");
-				for(int j =0;j<verifyR.length;j++){
-					System.out.println(verifyR[j]);
-				}
-				
-				LinkedBlockingDeque<Float> verifyC = resultBuffer.getColunmn(1);
-				System.out.println("verify column:");
-				Iterator<Float> myiterator = verifyC.iterator();
-				while (myiterator.hasNext()) {
-					System.out.println(myiterator.next());
-				}
-			}*/
-			
-			private float[] GuoguoAlgorithm(float[] in){
+
+			/*
+			 * private void myprocess(String in){ float[] data =
+			 * fromStringToFloat(in); float[] result = GuoguoAlgorithm(data);
+			 * resultBuffer.addRow(result);
+			 * System.out.println("resultBuffer added");
+			 * 
+			 * float[] verifyR = resultBuffer.getFirstRow();
+			 * System.out.println("verify row:"); for(int j
+			 * =0;j<verifyR.length;j++){ System.out.println(verifyR[j]); }
+			 * 
+			 * LinkedBlockingDeque<Float> verifyC = resultBuffer.getColunmn(1);
+			 * System.out.println("verify column:"); Iterator<Float> myiterator
+			 * = verifyC.iterator(); while (myiterator.hasNext()) {
+			 * System.out.println(myiterator.next()); } }
+			 */
+
+			private float[] GuoguoAlgorithm(float[] in) {
 				return in;
 			}
 		}
-		
+
 		/**
-		 * ÏÞ¶¨³¤¿íµÄ¾ØÕó£¨Ê¹ÓÃÊý×é£©
+		 * ï¿½Þ¶ï¿½ï¿½ï¿½ï¿½ï¿½Ä¾ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½ï¿½ï¿½ï¿½é£©
 		 * 
 		 * @author zhangpeng
 		 * @date 2013-5-28
 		 */
-		private class MatrixBuffer
-		{
-			/** ¾ØÕóµÄÊý¾Ý */
+		private class MatrixBuffer {
+			/** ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
 			List<double[]> matrix;
-			/** ¾ØÕóµÄÐÐÊý */
+			/** ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
 			int number_rows;
-			/** ¾ØÕóµÄÁÐÊý */
+			/** ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
 			int number_columns;
 
-			public MatrixBuffer(int number_rows, int number_columns)
-			{
+			public MatrixBuffer(int number_rows, int number_columns) {
 				this.number_rows = number_rows;
 				this.number_columns = number_columns;
-				// Ê¹ÓÃarrayList»¹ÊÇLinkedList¸ù¾ÝÊ¹ÓÃÇé¿ö¶ø¶¨£¬Èç¹û¸ÃÀàµÄ¶ÁÈ¡²Ù×÷½Ï¶à£¬Ê¹ÓÃArrayList£¬ Èç¹û²åÈë²Ù×÷½Ï¶àÊ¹ÓÃLinkedList
-				 matrix = new ArrayList<double[]>();
-				//matrix = new LinkedList<float[]>();
+				// Ê¹ï¿½ï¿½arrayListï¿½ï¿½ï¿½ï¿½LinkedListï¿½ï¿½ï¿½Ê¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¶ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½Ï¶à£¬Ê¹ï¿½ï¿½ArrayListï¿½ï¿½
+				// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¶ï¿½Ê¹ï¿½ï¿½LinkedList
+				matrix = new ArrayList<double[]>();
+				// matrix = new LinkedList<float[]>();
 			}
-			
-			//»ñÈ¡¶ÔÓ¦ÁÐÊýµÄ·½·¨ÎÒÃ»Ð´£¬ÎÒ²»ÖªµÀÄãÃÇÎªÊ²Ã´ÐèÒªÕâ¸ö·½·¨
-//			 getColunmn(int index)
+
+			// ï¿½ï¿½È¡ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½Ä·ï¿½ï¿½ï¿½ï¿½ï¿½Ã»Ð´ï¿½ï¿½ï¿½Ò²ï¿½Öªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÎªÊ²Ã´ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+			// getColunmn(int index)
 
 			/**
-			 * »ñÈ¡µÚÒ»ÐÐ
+			 * ï¿½ï¿½È¡ï¿½ï¿½Ò»ï¿½ï¿½
 			 * 
 			 * @author zhangpeng
 			 * @date 2013-5-28
 			 * @return
 			 */
-			public double[] getFirstRow()
-			{
+			public double[] getFirstRow() {
 				return matrix.get(0);
 			}
 
-			public int getcurrentRows()
-			{
+			public int getcurrentRows() {
 				return matrix.size();
 			}
-			
+
 			/**
-			 * Ìí¼ÓÊý¾Ýµ½µÚÒ»ÐÐ£¬Èç¹ûÐÐÊý³¬¹ýÏÞÖÆ£¬ÒÆ³ý×îºóÒ»ÐÐ
+			 * ï¿½ï¿½ï¿½ï¿½ï¿½Ýµï¿½ï¿½ï¿½Ò»ï¿½Ð£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ£ï¿½ï¿½Æ³ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½
 			 * 
 			 * @author zhangpeng
 			 * @date 2013-5-28
 			 * @param resultArray
-			 * @throws Exception 
+			 * @throws Exception
 			 */
-			public void addRow(double[] resultArray)
-			{ 
-				//Èç¹ûÊý×é³¤¶È´óÓÚ¾ØÕóÁÐÊý£¬½ØÈ¡Êý×é
-				if (resultArray.length>number_columns)
-				{
+			public void addRow(double[] resultArray) {
+				// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½é³¤ï¿½È´ï¿½ï¿½Ú¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½
+				if (resultArray.length > number_columns) {
 					double[] temp = new double[number_columns];
 					System.arraycopy(resultArray, 0, temp, 0, number_columns);
 					resultArray = temp;
 				}
-				
+
 				matrix.add(0, resultArray);
 
-				if (matrix.size() > number_rows)
-				{
+				if (matrix.size() > number_rows) {
 					matrix.remove(matrix.size() - 1);
 				}
 			}
 
 			/**
-			 * »ñÈ¡Ç°¼¸ÐÐµÄÊý¾Ý
+			 * ï¿½ï¿½È¡Ç°ï¿½ï¿½ï¿½Ðµï¿½ï¿½ï¿½ï¿½
 			 * 
 			 * @author zhangpeng
 			 * @date 2013-5-28
 			 * @param row
 			 * @return
 			 */
-			public double[][] getArray(int row)
-			{
-				//Èç¹ûÒªÈ¡µÄÐÐÊý´óÓÚ¾ØÕóÏÖÓÐµÄ³¤¶È£¬ÔòÈ¡³öËùÓÐÊý¾Ý
-				row = row>matrix.size()?matrix.size():row;
-				
+			public double[][] getArray(int row) {
+				// ï¿½ï¿½ï¿½ÒªÈ¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÐµÄ³ï¿½ï¿½È£ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+				row = row > matrix.size() ? matrix.size() : row;
+
 				double[][] fs = new double[row][number_columns];
 
-				for (int i = 0; i < row; i++)
-				{
+				for (int i = 0; i < row; i++) {
 					fs[i] = matrix.get(i);
 				}
 
 				return fs;
 			}
-			
+
 			/**
-			 * »ñÈ¡×îÐÂ¼¸ÐÐµÄÊý¾Ý
+			 * ï¿½ï¿½È¡ï¿½ï¿½ï¿½Â¼ï¿½ï¿½Ðµï¿½ï¿½ï¿½ï¿½
 			 * 
 			 * @author Kaikai Liu
 			 * @date 2013-5-28
 			 * @param row
 			 * @return
 			 */
-			public double[][] getLatestArray(int row)
-			{
-				//Èç¹ûÒªÈ¡µÄÐÐÊý´óÓÚ¾ØÕóÏÖÓÐµÄ³¤¶È£¬ÔòÈ¡³öËùÓÐÊý¾Ý
-				row = row>matrix.size()?matrix.size():row;
-				
-				double[][] fs = new double[row+1][number_columns];
-				int j=0;
-				for (int i = row-1; i >=0; i--)
-				{
+			public double[][] getLatestArray(int row) {
+				// ï¿½ï¿½ï¿½ÒªÈ¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÐµÄ³ï¿½ï¿½È£ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+				row = row > matrix.size() ? matrix.size() : row;
+
+				// double[][] fs = new double[row+1][number_columns];
+				double[][] fs = new double[row][number_columns];
+				int j = 0;
+				for (int i = row - 1; i >= 0; i--) {
 					fs[j] = matrix.get(i);
 					j++;
 				}
@@ -651,5 +664,11 @@ public class GuoguoServer {
 			}
 		}
 	}
-	
+
+	public static class MediaBlock {
+		public int type;
+		public int timeStamp;
+		public int length;
+		public byte[] payload;
+	}
 }
