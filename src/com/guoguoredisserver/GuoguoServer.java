@@ -3,6 +3,7 @@ package com.guoguoredisserver;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.zip.DataFormatException;
 
@@ -18,6 +19,7 @@ public class GuoguoServer {
 	JedisPoolConfig conf;
 	JedisPool pool;
 	String redisIP;
+	private ConcurrentLinkedQueue<String> onlineUsers = new ConcurrentLinkedQueue<String>();
 
 	public static void main(String[] args) {
 		GuoguoServer server = new GuoguoServer();
@@ -26,8 +28,8 @@ public class GuoguoServer {
 
 	void DataRecordStart() {
 		redisInit();
-		HandlerThread dataRecord = new HandlerThread("vv");
-		dataRecord.start();
+		NotificationThread thread = new NotificationThread();
+		thread.start();
 	}
 
 	void redisInit() {
@@ -51,22 +53,31 @@ public class GuoguoServer {
 		private HandlerLisetner hl;
 		private Jedis listenerJedis;
 		private int receivedSize = 100;
+		private int time = 0;
 
-		private String storefilename = "audio";
+		private boolean isRunning = true;
 
-		BufferedWriter writerpos; // to save data in harddisk
+		private String userName = "audio";
+
+		BufferedWriter writerpos;
 
 		Worker myWorker;
+
+		public HandlerThread(String _userName) {
+			this.channel_up = _userName + "_list";
+			this.userName = _userName;
+		}
 
 		public void run() {
 			init();
 			myWorker.start();
+			new Timer().start();
 			listenerJedis.subscribe(hl, channel_up);
 		}
 
 		private void init() {
 			try {
-				writerpos = new BufferedWriter(new FileWriter(storefilename
+				writerpos = new BufferedWriter(new FileWriter(userName
 						+ "pos.txt"));
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -75,19 +86,37 @@ public class GuoguoServer {
 			while (listenerJedis == null) {
 				listenerJedis = pool.getResource();
 			}
+			System.out.println("Starting: " + userName);
+
 			hl = new HandlerLisetner();
 			myWorker = new Worker();
-			System.out.println("handler init ready");
 		}
 
-		public HandlerThread(String _userName) {
-			this.channel_up = _userName + "_list";
+		private class Timer extends Thread {
+
+			public void run() {
+				while (time < 5) {
+					time++;
+					System.out.println(time);
+					try {
+						Thread.sleep(1000);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+				onlineUsers.remove(userName);
+				System.out.println("Stopping: " + userName);
+				isRunning = false;
+				hl.unsubscribe(channel_up);
+			}
 		}
 
 		private class HandlerLisetner extends JedisPubSub {
 			@Override
 			public void onMessage(String channel, String msg) {
+				System.out.println("DataReceived: " + userName);
 				receivedDataBuffer.add(msg);
+				time = 0;
 			}
 
 			@Override
@@ -116,13 +145,13 @@ public class GuoguoServer {
 
 			public void run() {
 				try {
-					writer = new BufferedWriter(new FileWriter(storefilename
+					writer = new BufferedWriter(new FileWriter(userName
 							+ ".txt"));
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
 
-				while (true) {
+				while (isRunning) {
 					if (receivedDataBuffer.isEmpty() == false) {
 						String toprocess = receivedDataBuffer.poll();
 						datarecord(toprocess);
@@ -134,7 +163,7 @@ public class GuoguoServer {
 			String fromStringToFloat(String in) throws IOException,
 					DataFormatException {
 				byte[] bytes = Base64.decode(in);
-				byte[] originalData = CompressionUtils.decompress(bytes);
+				byte[] originalData = bytes;// CompressionUtils.decompress(bytes);
 				StringBuffer floatString = new StringBuffer();
 
 				for (int i = 0; i < originalData.length; i += 4) {
@@ -158,6 +187,61 @@ public class GuoguoServer {
 
 			}
 
+		}
+
+	}
+
+	class NotificationThread extends Thread {
+
+		private String channel_up;
+		private HandlerLisetner hl;
+		private Jedis listenerJedis;
+
+		public NotificationThread() {
+			this.channel_up = "notification";
+		}
+
+		public void run() {
+			init();
+			listenerJedis.subscribe(hl, channel_up);
+		}
+
+		private void init() {
+			while (listenerJedis == null) {
+				listenerJedis = pool.getResource();
+			}
+			hl = new HandlerLisetner();
+		}
+
+		private class HandlerLisetner extends JedisPubSub {
+			@Override
+			public void onMessage(String channel, String msg) {
+				if (!onlineUsers.contains(msg)) {
+					HandlerThread dataRecord = new HandlerThread(msg);
+					dataRecord.start();
+					onlineUsers.add(msg);
+				}
+			}
+
+			@Override
+			public void onPMessage(String arg0, String arg1, String arg2) {
+			}
+
+			@Override
+			public void onPSubscribe(String arg0, int arg1) {
+			}
+
+			@Override
+			public void onPUnsubscribe(String arg0, int arg1) {
+			}
+
+			@Override
+			public void onSubscribe(String arg0, int arg1) {
+			}
+
+			@Override
+			public void onUnsubscribe(String arg0, int arg1) {
+			}
 		}
 
 	}

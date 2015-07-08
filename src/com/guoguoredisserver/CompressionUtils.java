@@ -29,6 +29,15 @@ public class CompressionUtils {
 		return output;
 	}
 
+	public static void main(String[] args) throws IOException,
+			DataFormatException {
+		byte[] in = { 1, 2, 3, 4 };
+		byte[] out = compress(in);
+		byte[] result = decompress(out);
+		System.out.println(result[0] + " " + result[1] + " " + result[2] + " "
+				+ result[3]);
+	}
+
 	public static byte[] decompress(byte[] data) throws IOException,
 			DataFormatException {
 		Inflater inflater = new Inflater();
