@@ -1,6 +1,8 @@
 package com.redisclient;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.concurrent.LinkedBlockingDeque;
 
 import redis.clients.jedis.Jedis;
@@ -10,7 +12,8 @@ import redis.clients.jedis.JedisPubSub;
 import com.sun.org.apache.xerces.internal.impl.dv.util.Base64;
 
 class DataHandler implements Runnable {
-	public static final int bufferSize = 1024 * 128 * 4 * 10;
+	public static final int bufferSize = 1024 * 128 * 4;
+	private static final int SecondsToExpire = 100;
 
 	private String channel_up;
 	private LinkedBlockingDeque<String> receivedDataBuffer;
@@ -59,8 +62,6 @@ class DataHandler implements Runnable {
 	}
 
 	private class Timer extends Thread {
-
-		private static final int SecondsToExpire = 10;
 
 		public void run() {
 			while (time < SecondsToExpire) {
@@ -117,17 +118,28 @@ class DataHandler implements Runnable {
 		private Analyser analyser = new Analyser();
 
 		public void run() {
-
+			buffer.order(ByteOrder.LITTLE_ENDIAN);
 			while (isRunning) {
 				if (receivedDataBuffer.isEmpty() == false) {
 					String toprocess = receivedDataBuffer.poll();
 					byte[] bytes = Base64.decode(toprocess);
 					byte[] originalData = bytes;// CompressionUtils.decompress(bytes);
+					buffer.clear();
 					buffer.put(originalData);
-					if (buffer.position() == buffer.capacity()) {
-						analyser.analyse(userName, buffer.array());
-						buffer.clear();
+					try {
+						analyser.analyse(userName, originalData);
+					} catch (IOException e) {
+						e.printStackTrace();
 					}
+
+					// if (buffer.position() == buffer.capacity()) {
+					// try {
+					// analyser.analyse(userName, buffer.array());
+					// } catch (IOException e) {
+					// e.printStackTrace();
+					// }
+					// buffer.clear();
+					// }
 				}
 			}
 

@@ -20,8 +20,9 @@ public class Main implements DataHandler.OnFinishListener {
 
 	void start() {
 		redisInit();
-		NotificationThread thread = new NotificationThread();
-		thread.start();
+		new DataHandler("vv", this, pool).start();
+		// NotificationThread thread = new NotificationThread();
+		// thread.start();
 	}
 
 	void redisInit() {
@@ -64,8 +65,8 @@ public class Main implements DataHandler.OnFinishListener {
 			@Override
 			public void onMessage(String channel, String msg) {
 				if (!onlineUsers.contains(msg)) {
-					DataHandler dataRecord = new DataHandler(msg,
-							Main.this, pool);
+					DataHandler dataRecord = new DataHandler(msg, Main.this,
+							pool);
 					dataRecord.start();
 					onlineUsers.add(msg);
 				}

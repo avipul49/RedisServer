@@ -4,5 +4,6 @@
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry kind="lib" path="libs/jedis-2.1.0.jar"/>
 	<classpathentry kind="lib" path="libs/commons-pool-1.6.jar"/>
+	<classpathentry kind="lib" path="libs/jcodec-0.1.5.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
